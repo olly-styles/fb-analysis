@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<!-- saved from url=(0030)http://10.89.173.232/analysis/ -->
+<html>
+	<head>
+		<title>Analyser</title>
+		<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+		<link rel="stylesheet" href="./Analyser_files/styles.css">
+
+		<script type="text/javascript" src="./Analyser_files/d3.v2.js"></script>
+		<script type="text/javascript" src="./Analyser_files/jquery-1.11.3.min.js"></script>
+		<script type="text/javascript" src="./Analyser_files/scripts.js"></script>
+   
+</head>
+	<body>
+		<p>Welcome to the analyser!</p>
+
+		<p class="loading"></p>   <!-- Class for the loading information -->
+
+		<form id="frm_options" action="#">
+			<input type="file" id="uploader" value="Browse..." />
+			<br />
+		
+			<input type="checkbox" id="sorter" /> 
+			<label for="sorter">Sort values</label>
+			<br />
+			
+			<input type="checkbox" id="discountCommon" /> 
+			<label for="sorter">Discount common words (e.g. I, you, to, a)</label>
+			<br />
+			
+			<input type="checkbox" id="discountEmoticons" /> 
+			<label for="sorter">Discount words beginning with punctuation (e.g. :), =P, ...)</label>
+			<br />
+			
+			<input type="submit" value="Analyse" />
+		</form>
+
+		<div id="container"></div>
+		
+<!-- tables belong in 1999
+		<table id="table">
+			<tbody>
+				<tr>
+					<th>Chat thread</th>
+					<th>Number of messages </th>
+				</tr>
+				<tr>
+				</tr>
+			</tbody>
+		</table> -->
+
+		<div id="chart" class="chart">
+		</div>
+
+	</body>
+</html>
