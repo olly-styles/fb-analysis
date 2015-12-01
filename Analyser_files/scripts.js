@@ -4,7 +4,21 @@ $(document).ready(function () {
 	$( "#frm_options" ).submit(function( event ) {		//Listen for the submit button
 		event.preventDefault();
 		if (fileContents != "") {
-			load_dataset(fileContents);					//Begin the analysis
+			html = $.parseHTML( fileContents );    //Raw HTML from file. Returns an array
+			data = html[4];               //Just the useful content
+			threads = data.querySelectorAll(THREAD);
+			username = data.querySelectorAll(USER)[0].childNodes[0].nodeValue;
+			create_thread_length_graph(username,threads);					//Begin the analysis
+		}
+	});
+
+	$( "#frm_cloud" ).submit(function( event ) {
+		event.preventDefault();
+		if (fileContents != "") {
+			html = $.parseHTML( fileContents );    //Raw HTML from file. Returns an array
+			data = html[4];               //Just the useful content
+			threads = data.querySelectorAll(THREAD);
+			create_word_cloud(threads);
 		}
 	});
 
@@ -29,23 +43,64 @@ var CONTENTS = ".contents";
 var THREAD = ".thread";
 var USER = "h1";
 var MSG = ".message"
+var html;
+var data;
+var threads;
+var username;
 
-function load_dataset(arg) {
+/*
+Returns an object containing each word and its count, eg {unlucky: 2, shrek: 999}
+oldwords is another object of the same type to add the words to. 
+	If there isn't one, pass an empty object {}
+*/
+function count_words(messages,threadLength,oldWords,discountEmoticons,discountCommon) {
+
+	for (var w = 0; w < threadLength; w++) {
+		var msg = messages[w].nextElementSibling.innerHTML;
+		var wordsInMsg = msg.split(/\s+/);
+		for (wrd in wordsInMsg) {
+			var word = wordsInMsg[wrd];
+			
+			word = word.toLowerCase();
+			
+			//discount emoticons
+			if (discountEmoticons) {
+				if (!(word.match(/^[^\w\d]/) == null)) {
+					continue;
+				}
+			}
+			
+			//remove trailing punctuation
+			word = word.replace(/^[^\w\d]+/,"");
+			word = word.replace(/[^\w\d]+$/,"");
+			
+			//discount common words
+			if (discountCommon) {	
+				if (stopList.hasOwnProperty(word))
+				{
+					continue;
+				}
+			}
+			
+			if (oldWords.hasOwnProperty(word)) {
+				oldWords[word] = oldWords[word] + 1;
+			}
+			else {
+				oldWords[word] = 1;
+			}
+		}
+	}
+	return oldWords;	
+}
+
+function create_thread_length_graph(username,threads){
 
 	var discountEmoticons = document.getElementById("discountEmoticons").checked;
 	var discountCommon = document.getElementById("discountCommon").checked;
 
-	html = $.parseHTML( arg );    //Raw HTML from file. Returns an array
-
-	data = html[4];               //Just the useful content
-
 	var threadLengths = [];
 
-	var threads = data.querySelectorAll(THREAD);
-
 	var numthreads = threads.length;
-
-	var username = data.querySelectorAll(USER)[0].childNodes[0].nodeValue;
 
 	var recipents = {};
 	
@@ -79,47 +134,12 @@ function load_dataset(arg) {
 			recipents[title] = {};
 		}
 		
-		//do word count
-		for (var w = 0; w < threadLength; w++) {
-			var msg = messages[w].nextElementSibling.innerHTML;
-			wordsInMsg = msg.split(/\s+/);
-			for (wrd in wordsInMsg) {
-				var word = wordsInMsg[wrd];
-				
-				word = word.toLowerCase();
-				
-				//discount emoticons
-				if (discountEmoticons) {
-					if (!(word.match(/^[^\w\d]/) == null)) {
-						continue;
-					}
-				}
-				
-				//remove trailing punctuation
-				word = word.replace(/^[^\w\d]+/,"");
-				word = word.replace(/[^\w\d]+$/,"");
-				
-				//discount common words
-				if (discountCommon) {	
-					if (stopList.hasOwnProperty(word))
-					{
-						continue;
-					}
-				}
-				
-				if (oldWords.hasOwnProperty(word)) {
-					oldWords[word] = oldWords[word] + 1;
-				}
-				else {
-					oldWords[word] = 1;
-				}
-			}
-		}
-		
+		newWords = count_words(messages,threadLength,oldWords,discountEmoticons,discountCommon);
+
 		var newCount = oldCount + threadLength;
 		//store new values for this title
 		recipents[title].count = newCount;
-		recipents[title].words = oldWords;
+		recipents[title].words = newWords;
 		
 		if (newCount > max) {
 			max = newCount;
@@ -223,17 +243,6 @@ function load_dataset(arg) {
 			.delay(delay);
 	};
 
-	//http://stackoverflow.com/questions/5199901/how-to-sort-an-associative-array-by-its-values-in-javascript
-	function getSortedKeys(obj) {
-		var keys = []; 
-		for(var key in obj) {
-			keys.push([key, obj[key]]);
-		}
-		return keys.sort(function(a,b){
-			return obj[b[0]]-obj[a[0]];
-		});
-	};
-	
 	
 	function showToolTip(pMessage,pX,pY,pShow) {
 		if (typeof(tooltipDivID)=="undefined")
@@ -251,27 +260,112 @@ function load_dataset(arg) {
 		}
 	};
 	
-	//https://github.com/janl/mustache.js/blob/master/mustache.js#L82
-	var entityMap = {
-		"&": "&amp;",
-		"<": "&lt;",
-		">": "&gt;",
-		'"': '&quot;',
-		"'": '&#39;',
-		"/": '&#x2F;'
-	};
-
-	function escapeHtml(string) {
-		return String(string).replace(/[&<>"'\/]/g, function (s) {
-			return entityMap[s];
-		});
-	};
 }
 
-//http://tagcrowd.com/languages/English
-	var stopList = {};
+function create_word_cloud(threads) {
 
-	var words = [
+	var discountEmoticons = document.getElementById("discountEmoticons").checked;
+	var discountCommon = document.getElementById("discountCommon").checked;
+
+	var numthreads = threads.length;
+
+	var words = {};
+
+	for (i = 0; i < numthreads; i++) { 
+		var messages = threads[i].querySelectorAll(MSG);
+		var threadLength = messages.length;
+		words = count_words(messages,threadLength,words,discountEmoticons,discountCommon);
+	}
+
+	var wordList = getSortedKeys(words);
+	var cloudWords = {};
+	var justWords = [];
+	var minWord;
+	var maxWord;
+	for (var i = 0; i < 80 && i < wordList.length; i++)
+	{
+		var escapedWord = escapeHtml(wordList[i][1] + " - " + wordList[i][0]);
+		cloudWords[escapeHtml(wordList[i][0])] = wordList[i][1];
+		justWords[i] = escapeHtml(wordList[i][0]);
+		if(i == 0) {
+			maxWord = wordList[i][1];
+		}
+		if(i == 79) {
+			minWord = wordList[i][1];
+		}
+	}
+
+
+	var wordScale = d3.scale.linear().range([20,120]);
+
+	wordScale.domain([minWord,maxWord]);
+
+	var fill = d3.scale.category20();
+
+ 	d3.layout.cloud()
+	    .size([600, 600])
+	    .words(justWords.map(function(d) {
+			 return {text: d, size: wordScale(cloudWords[d])};
+	    }))
+	    .padding(5)
+	    .rotate(function() { return ~~(Math.random() * 2) * 90; })
+	    .font("Impact")
+	    .fontSize(function(d) { return d.size; })
+	    .on("end", draw)
+		.start();
+
+	function draw(words) {
+	  d3.select("body").append("svg")
+	      .attr("width", 600)
+	      .attr("height", 600)
+	    .append("g")
+	      .attr("transform", "translate(300,300)")
+	    .selectAll("text")
+	      .data(words)
+	    .enter().append("text")
+	      .style("font-size", function(d) { return d.size + "px"; })
+	      .style("font-family", "Impact")
+	      .style("fill", function(d, i) { return fill(i); })
+	      .attr("text-anchor", "middle")
+	      .attr("transform", function(d) {
+	        return "translate(" + [d.x, d.y] + ")rotate(" + d.rotate + ")";
+	      })
+	      .text(function(d) { return d.text; });
+	}
+}
+
+//http://stackoverflow.com/questions/5199901/how-to-sort-an-associative-array-by-its-values-in-javascript
+function getSortedKeys(obj) {
+	var keys = []; 
+	for(var key in obj) {
+		keys.push([key, obj[key]]);
+	}
+	return keys.sort(function(a,b){
+		return obj[b[0]]-obj[a[0]];
+	});
+};
+
+function escapeHtml(string) {
+	return String(string).replace(/[&<>"'\/]/g, function (s) {
+		return entityMap[s];
+	});
+};
+
+//https://github.com/janl/mustache.js/blob/master/mustache.js#L82
+var entityMap = {
+	"&": "&amp;",
+	"<": "&lt;",
+	">": "&gt;",
+	'"': '&quot;',
+	"'": '&#39;',
+	"/": '&#x2F;'
+};
+
+
+//http://tagcrowd.com/languages/English
+var stopList = {};
+
+var words = [
 "january","february","march","april","may","june","july","august","september","october","november","december","monday","tuesday","wednesday","thursday","friday","saturday",
 "a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z","-","--","''","we've","we'll","we're","who'll","who've","who's","you'll",
 "you've","you're","i'll","i've","i'm","i'd","he'll","he'd","he's","she'll","she'd","she's","it'll","it'd","it's","they've","they're","they'll","didn't","don't","can't","won't",
@@ -285,7 +379,7 @@ function load_dataset(arg) {
 "near","should","still","between","never","last","let","though","might","saw","left","late","run","don't","while","close","few","seem","next","got","always","those","both","often",
 "thus","won't","not","into","inside","its","makes","tenth","trying","i","me","my","myself","we","us","our","ours","ourselves","you","your","yours","yourself","yourselves","he","him",
 "his","himself","she","her","hers","herself","it","its","itself","they","them","their","theirs","themselves","what","which","who","whom","this","that","these","those","am","is",
-"are","was","were","be","been","being","have","has","had","having","do","does","did","doing","will","would","shall","should","can","could","may","might","must","ought","i'm","you're",
+"are","was","were","be","been",	"being","have","has","had","having","do","does","did","doing","will","would","shall","should","can","could","may","might","must","ought","i'm","you're",
 "he's","she's","it's","we're","they're","i've","you've","we've","they've","i'd","you'd","he'd","she'd","we'd","they'd","i'll","you'll","he'll","she'll","we'll","they'll","isn't",
 "aren't","wasn't","weren't","hasn't","haven't","hadn't","doesn't","don't","didn't","won't","wouldn't","shan't","shouldn't","can't","cannot","couldn't","mustn't","let's","that's",
 "who's","what's","here's","there's","when's","where's","why's","how's","daren't","needn't","oughtn't","mightn't","a","an","the","and","but","if","or","because","as","until","while",
@@ -293,9 +387,10 @@ function load_dataset(arg) {
 "again","further","then","once","here","there","when","where","why","how","all","any","both","each","few","more","most","other","some","such","no","nor","not","only","own","same",
 "so","than","too","very","one","every","least","less","many","now","ever","never","say","says","said","also","get","go","goes","just","made","make","put","see","seen","whether",
 "like","well","back","even","still","way","take","since","another","however","two","three","four","five","first","second","new","old","high","long","going","ok","really","yeah","im",
-"0","1","2","3","4","5","6","7","8","9","okay","sure","dont","maybe","getting","gonna","today",""
-	]
+"0","1","2","3","4","5","6","7","8","9","10","okay","sure","dont","maybe","getting","gonna","today","anyone","everyone","coming","probably","around","already","thats","around","else",
+"enough","something","lol","oh","ill","anyway","someone","cant","hey","wants","wanna",""
+]
 
-	for (var i = 0; i <= words.length; i++) {
-		stopList[words[i]] = 1;
-	};
+for (var i = 0; i <= words.length; i++) {
+	stopList[words[i]] = 1;
+};
